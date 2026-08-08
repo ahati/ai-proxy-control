@@ -66,13 +66,38 @@ function runCapture(argv) {
     }
 }
 
-/* Detect the running ai-proxy process(es). Returns an array of PIDs. pgrep
- * exits non-zero with no output when nothing matches, which spawn_sync surfaces
- * as an error — caught and treated as "not running". */
+/* Detect live (non-zombie) ai-proxy process(es). Returns an array of PIDs.
+ *
+ * pgrep matches defunct/zombie children too, and an ai-proxy spawned by a
+ * prior shell session can linger as an unreaped zombie after Stop — which
+ * would keep the indicator pinned on "Running". We therefore list matching
+ * PIDs via pgrep and then drop any whose /proc/<pid>/stat state is 'Z'
+ * (zombie). pgrep exits non-zero when nothing matches, which spawn_sync
+ * surfaces as an error — caught and treated as "not running". */
 function detectPids() {
     const out = runCapture(['pgrep', '-x', PROCESS_NAME]);
     if (!out) return [];
-    return out.split(/\s+/).map(s => parseInt(s, 10)).filter(n => !isNaN(n));
+    return out.split(/\s+/)
+        .map(s => parseInt(s, 10))
+        .filter(n => !isNaN(n))
+        .filter(pid => processState(pid) !== 'Z');
+}
+
+/* Read the single-letter process state from /proc/<pid>/stat. Returns '' if
+ * the process is gone or the field can't be parsed. Field 3 is the state,
+ * but the comm field (2) is parenthesized and may contain spaces/parens, so
+ * parse from the last ')' onward. */
+function processState(pid) {
+    try {
+        const path = `/proc/${pid}/stat`;
+        const [, bytes] = GLib.file_get_contents(path);
+        const stat = bytes ? imports.byteArray.toString(bytes) : '';
+        const rp = stat.lastIndexOf(')');
+        if (rp < 0) return '';
+        return stat.slice(rp + 2).trim().split(/\s+/)[0] || '';
+    } catch (e) {
+        return '';
+    }
 }
 
 /* Append an SVG status dot element as a child to a row. Color is applied via
@@ -130,8 +155,6 @@ const LogViewerWindow = GObject.registerClass(
                 reactive: true,
                 can_focus: true,
                 track_hover: true,
-                width: LOG_WINDOW_W,
-                height: LOG_WINDOW_H,
             });
             this._settings = settings;
             this._paused = false;
@@ -140,7 +163,11 @@ const LogViewerWindow = GObject.registerClass(
 
             this._buildChrome();
 
-            /* Mount into the UI layer above everything. */
+            /* Fixed size: set after construction (Clutter uses width/height
+             * request props, but set_size is unambiguous for a chrome window). */
+            this.set_size(LOG_WINDOW_W, LOG_WINDOW_H);
+
+            /* Mount into the UI layer above everything and make it visible. */
             Main.layoutManager.addChrome(this, { affectsInputRegion: true });
             /* Center on the primary monitor. */
             const monitor = Main.layoutManager.primaryMonitor;
@@ -149,6 +176,8 @@ const LogViewerWindow = GObject.registerClass(
                     Math.round(monitor.x + (monitor.width - LOG_WINDOW_W) / 2),
                     Math.round(monitor.y + (monitor.height - LOG_WINDOW_H) / 2));
             }
+
+            this.show();
 
             this.connect('destroy', () => this._onDestroy());
             this._refresh();
@@ -186,22 +215,8 @@ const LogViewerWindow = GObject.registerClass(
             header.add_child(this._closeBtn);
             this.add_child(header);
 
-            /* Scrollable log body */
-            const scroll = new St.ScrollView({
-                style_class: 'aiproxy-log-scroll',
-                x_expand: true,
-                y_expand: true,
-                overlay_scrollbars: true,
-            });
-            this._scroll = scroll;
-            this._scrollPolicyId = scroll.connect('scroll-event', () => {
-                /* If the user scrolls away from the bottom, stop auto-scrolling. */
-                const vadj = scroll.vscroll.adjustment;
-                const atBottom = vadj.value + vadj.page_size >= vadj.upper - 4;
-                this._autoScroll = atBottom;
-                return Clutter.EVENT_PROPAGATE;
-            });
-
+            /* Scrollable log body. The content goes via set_child (St.ScrollView
+             * in GNOME 50 exposes set_child, not the legacy add_actor). */
             this._body = new St.Label({
                 style_class: 'aiproxy-log-body',
                 text: '',
@@ -213,7 +228,21 @@ const LogViewerWindow = GObject.registerClass(
             this._body.clutter_text.ellipsize = Pango.EllipsizeMode.NONE;
             this._body.clutter_text.selectable = true;
             this._body.clutter_text.editable = false;
-            scroll.add_actor(this._body);
+
+            const scroll = new St.ScrollView({
+                style_class: 'aiproxy-log-scroll',
+                x_expand: true,
+                y_expand: true,
+                child: this._body,
+            });
+            this._scroll = scroll;
+            this._scrollPolicyId = scroll.connect('scroll-event', () => {
+                /* If the user scrolls away from the bottom, stop auto-scrolling. */
+                const vadj = scroll.vadjustment;
+                const atBottom = vadj.value + vadj.page_size >= vadj.upper - 4;
+                this._autoScroll = atBottom;
+                return Clutter.EVENT_PROPAGATE;
+            });
             this.add_child(scroll);
 
             /* Footer */
@@ -287,7 +316,7 @@ const LogViewerWindow = GObject.registerClass(
         }
 
         _scrollToEnd() {
-            const vadj = this._scroll.vscroll.adjustment;
+            const vadj = this._scroll.vadjustment;
             vadj.set_value(vadj.upper - vadj.page_size);
         }
 
