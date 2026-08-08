@@ -217,7 +217,9 @@ const LogViewerWindow = GObject.registerClass(
             header.add_child(this._clearBtn);
             header.add_child(this._autoscrollBtn);
             header.add_child(this._closeBtn);
-            this._wireDrag(header);
+            this._wireDrag(header, [
+                this._pauseBtn, this._clearBtn, this._autoscrollBtn, this._closeBtn,
+            ]);
             this.add_child(header);
 
             /* Scrollable log body. St.ScrollView's child must implement the
@@ -274,19 +276,20 @@ const LogViewerWindow = GObject.registerClass(
          * The header is the drag handle. On button-press we record the offset
          * between the pointer and the window origin; on motion we move the
          * window to keep that offset constant. A stage grab captures motion
-         * events even when the pointer leaves the header. */
-        _wireDrag(handle) {
+         * events even when the pointer leaves the header. Presses that land on
+         * a toolbar button are skipped so the button keeps its click. */
+        _wireDrag(handle, buttons) {
             this._dragging = false;
             this._dragOffset = [0, 0];
             this._dragGrab = null;
+            this._dragButtons = buttons || [];
 
             handle.connect('button-press-event', (actor, event) => {
-                /* Left-button press on the header starts a drag. The toolbar
-                 * buttons are St.Buttons; they run their click handlers on the
-                 * press and stop propagation before this handler runs when the
-                 * press lands on them, so they remain clickable. */
                 if (event.get_button() !== 1) return Clutter.EVENT_PROPAGATE;
                 const [px, py] = event.get_coords();
+                /* If the press is inside any toolbar button, let the button
+                 * handle the click (don't start a drag or take the grab). */
+                if (this._pressOnButton(px, py)) return Clutter.EVENT_PROPAGATE;
                 const [wx, wy] = this.get_transformed_position();
                 this._dragOffset = [px - wx, py - wy];
                 this._dragging = true;
@@ -307,9 +310,20 @@ const LogViewerWindow = GObject.registerClass(
                 this._endDrag();
                 return Clutter.EVENT_STOP;
             });
+        }
 
-            /* If the grab is broken (e.g. focus stolen), stop dragging too. */
-            handle.connect('touch-event', () => Clutter.EVENT_PROPAGATE);
+        /* True if the stage coordinate (px,py) falls within any toolbar
+         * button's allocated area. Used to leave clicks on buttons alone. */
+        _pressOnButton(px, py) {
+            for (const btn of this._dragButtons) {
+                if (!btn.visible) continue;
+                const [bx, by] = btn.get_transformed_position();
+                const [bw, bh] = btn.get_size();
+                if (px >= bx && px <= bx + bw && py >= by && py <= by + bh) {
+                    return true;
+                }
+            }
+            return false;
         }
 
         _endDrag() {
