@@ -281,14 +281,11 @@ const LogViewerWindow = GObject.registerClass(
             this._dragGrab = null;
 
             handle.connect('button-press-event', (actor, event) => {
-                /* Only start a drag on left-button presses that land on the
-                 * header itself or the title label — not on toolbar buttons,
-                 * which need to receive their own clicks. */
+                /* Left-button press on the header starts a drag. The toolbar
+                 * buttons are St.Buttons; they run their click handlers on the
+                 * press and stop propagation before this handler runs when the
+                 * press lands on them, so they remain clickable. */
                 if (event.get_button() !== 1) return Clutter.EVENT_PROPAGATE;
-                const src = event.get_source();
-                if (src !== handle && src !== this._title) {
-                    return Clutter.EVENT_PROPAGATE;
-                }
                 const [px, py] = event.get_coords();
                 const [wx, wy] = this.get_transformed_position();
                 this._dragOffset = [px - wx, py - wy];
