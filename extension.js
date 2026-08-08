@@ -215,8 +215,9 @@ const LogViewerWindow = GObject.registerClass(
             header.add_child(this._closeBtn);
             this.add_child(header);
 
-            /* Scrollable log body. The content goes via set_child (St.ScrollView
-             * in GNOME 50 exposes set_child, not the legacy add_actor). */
+            /* Scrollable log body. St.ScrollView's child must implement the
+             * StScrollable interface — St.Label does not, so wrap the label in
+             * an St.BoxLayout (which does) and use that as the scroll child. */
             this._body = new St.Label({
                 style_class: 'aiproxy-log-body',
                 text: '',
@@ -229,11 +230,18 @@ const LogViewerWindow = GObject.registerClass(
             this._body.clutter_text.selectable = true;
             this._body.clutter_text.editable = false;
 
+            const bodyBox = new St.BoxLayout({
+                vertical: true,
+                x_expand: true,
+                y_expand: true,
+            });
+            bodyBox.add_child(this._body);
+
             const scroll = new St.ScrollView({
                 style_class: 'aiproxy-log-scroll',
                 x_expand: true,
                 y_expand: true,
-                child: this._body,
+                child: bodyBox,
             });
             this._scroll = scroll;
             this._scrollPolicyId = scroll.connect('scroll-event', () => {
