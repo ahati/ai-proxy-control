@@ -1,0 +1,15 @@
+# Build artifacts
+schemas/gschemas.compiled
+*.compiled
+
+# Editor / OS
+*.swp
+*.swo
+*~
+.DS_Store
+.idea/
+.vscode/
+*.code-workspace
+
+# Logs
+*.log

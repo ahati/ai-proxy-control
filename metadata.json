@@ -1,0 +1,17 @@
+{
+  "name": "AI Proxy Control",
+  "description": "Start, stop, and monitor the ai-proxy server from the top bar.",
+  "uuid": "ai-proxy-control@ahati",
+  "shell-version": [
+    "45",
+    "46",
+    "47",
+    "48",
+    "49",
+    "50"
+  ],
+  "version": 1,
+  "settings-schema": "org.gnome.shell.extensions.ai-proxy",
+  "url": "https://z.ai",
+  "gettext-domain": "ai-proxy-control"
+}

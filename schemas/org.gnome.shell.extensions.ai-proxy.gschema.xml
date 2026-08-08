@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="org.gnome.shell.extensions.ai-proxy"
+          path="/org/gnome/shell/extensions/ai-proxy/">
+    <key name="port" type="s">
+      <default>"8080"</default>
+      <summary>Server port</summary>
+      <description>Port passed to ai-proxy via -port (default 8080).</description>
+    </key>
+    <key name="conversation-store-size" type="i">
+      <default>100</default>
+      <summary>Conversation store size</summary>
+      <description>Max conversations kept in memory (-conversation-store-size).</description>
+    </key>
+    <key name="conversation-store-ttl" type="s">
+      <default>"24h"</default>
+      <summary>Conversation store TTL</summary>
+      <description>Time-to-live for stored conversations (-conversation-store-ttl).</description>
+    </key>
+    <key name="extra-args" type="s">
+      <default>""</default>
+      <summary>Extra arguments</summary>
+      <description>Additional command-line arguments appended to the ai-proxy launch command.</description>
+    </key>
+    <key name="auto-start" type="b">
+      <default>false</default>
+      <summary>Auto-start on enable</summary>
+      <description>Automatically start ai-proxy when the extension is enabled, if it is not already running.</description>
+    </key>
+    <key name="log-path" type="s">
+      <default>""</default>
+      <summary>Log file path</summary>
+      <description>File that ai-proxy stdout/stderr is appended to. When empty, defaults to ~/.local/share/ai-proxy-control/ai-proxy.log.</description>
+    </key>
+  </schema>
+</schemalist>
