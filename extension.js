@@ -190,10 +190,12 @@ const LogViewerWindow = GObject.registerClass(
         }
 
         _buildChrome() {
-            /* Title bar — also the drag handle for moving the window. */
+            /* Title bar — also the drag handle for moving the window. It must
+             * be reactive to receive button-press/motion/release events. */
             const header = new St.BoxLayout({
                 style_class: 'aiproxy-log-header',
                 x_expand: true,
+                reactive: true,
             });
             this._title = new St.Label({
                 text: 'ai-proxy log',
