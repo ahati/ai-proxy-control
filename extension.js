@@ -167,8 +167,10 @@ const LogViewerWindow = GObject.registerClass(
              * request props, but set_size is unambiguous for a chrome window). */
             this.set_size(LOG_WINDOW_W, LOG_WINDOW_H);
 
-            /* Mount into the UI layer above everything and make it visible. */
-            Main.layoutManager.addChrome(this, { affectsInputRegion: true });
+            /* Mount into the UI layer above everything and make it visible.
+             * addChrome only accepts {trackFullscreen, affectsStruts}; input
+             * region coverage is on by default for tracked chrome actors. */
+            Main.layoutManager.addChrome(this);
             /* Center on the primary monitor. */
             const monitor = Main.layoutManager.primaryMonitor;
             if (monitor) {
@@ -188,7 +190,7 @@ const LogViewerWindow = GObject.registerClass(
         }
 
         _buildChrome() {
-            /* Title bar */
+            /* Title bar — also the drag handle for moving the window. */
             const header = new St.BoxLayout({
                 style_class: 'aiproxy-log-header',
                 x_expand: true,
@@ -213,6 +215,7 @@ const LogViewerWindow = GObject.registerClass(
             header.add_child(this._clearBtn);
             header.add_child(this._autoscrollBtn);
             header.add_child(this._closeBtn);
+            this._wireDrag(header);
             this.add_child(header);
 
             /* Scrollable log body. St.ScrollView's child must implement the
@@ -262,6 +265,60 @@ const LogViewerWindow = GObject.registerClass(
             this.add_child(this._footer);
 
             this._updatePauseIcon();
+        }
+
+        /* ── Window dragging ──
+         *
+         * The header is the drag handle. On button-press we record the offset
+         * between the pointer and the window origin; on motion we move the
+         * window to keep that offset constant. A stage grab captures motion
+         * events even when the pointer leaves the header. */
+        _wireDrag(handle) {
+            this._dragging = false;
+            this._dragOffset = [0, 0];
+            this._dragGrab = null;
+
+            handle.connect('button-press-event', (actor, event) => {
+                /* Only start a drag on left-button presses that land on the
+                 * header itself or the title label — not on toolbar buttons,
+                 * which need to receive their own clicks. */
+                if (event.get_button() !== 1) return Clutter.EVENT_PROPAGATE;
+                const src = event.get_source();
+                if (src !== handle && src !== this._title) {
+                    return Clutter.EVENT_PROPAGATE;
+                }
+                const [px, py] = event.get_coords();
+                const [wx, wy] = this.get_transformed_position();
+                this._dragOffset = [px - wx, py - wy];
+                this._dragging = true;
+                this._dragGrab = global.stage.grab(handle);
+                return Clutter.EVENT_STOP;
+            });
+
+            handle.connect('motion-event', (actor, event) => {
+                if (!this._dragging) return Clutter.EVENT_PROPAGATE;
+                const [px, py] = event.get_coords();
+                this.set_position(
+                    Math.round(px - this._dragOffset[0]),
+                    Math.round(py - this._dragOffset[1]));
+                return Clutter.EVENT_STOP;
+            });
+
+            handle.connect('button-release-event', () => {
+                this._endDrag();
+                return Clutter.EVENT_STOP;
+            });
+
+            /* If the grab is broken (e.g. focus stolen), stop dragging too. */
+            handle.connect('touch-event', () => Clutter.EVENT_PROPAGATE);
+        }
+
+        _endDrag() {
+            this._dragging = false;
+            if (this._dragGrab) {
+                this._dragGrab.dismiss();
+                this._dragGrab = null;
+            }
         }
 
         _toolbarButton(iconName, callback) {
@@ -347,6 +404,7 @@ const LogViewerWindow = GObject.registerClass(
                 this._scroll.disconnect(this._scrollPolicyId);
                 this._scrollPolicyId = 0;
             }
+            this._endDrag();
         }
     }
 );
