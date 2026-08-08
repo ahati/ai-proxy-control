@@ -19,6 +19,25 @@ if ! command -v glib-compile-schemas >/dev/null 2>&1; then
     exit 1
 fi
 
+# ── Lint guardrails ──
+# node --check catches syntax errors in extension.js/prefs.js. It can't catch
+# runtime/API issues (those need a live shell), but it prevents broken commits.
+if command -v node >/dev/null 2>&1; then
+    for f in extension.js prefs.js; do
+        if ! node --check "$SRC_DIR/$f" 2>/dev/null; then
+            echo "error: $f failed node --check (syntax error)" >&2
+            node --check "$SRC_DIR/$f" || true
+            exit 1
+        fi
+    done
+fi
+# Reject deprecated GJS APIs that won't pass extension review and may break on
+# future GNOME versions: imports.byteArray (use TextDecoder/TextEncoder).
+if grep -rnE "imports\.byteArray" "$SRC_DIR"/*.js; then
+    echo "error: imports.byteArray is deprecated — use TextDecoder/TextEncoder." >&2
+    exit 1
+fi
+
 echo "Installing to ${DEST_DIR} ..."
 mkdir -p "${DEST_DIR}/schemas"
 cp -r \

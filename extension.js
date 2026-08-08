@@ -59,7 +59,7 @@ function runCapture(argv) {
     try {
         const [, stdout] = GLib.spawn_sync(null, argv, null,
             GLib.SpawnFlags.SEARCH_PATH, null);
-        const out = stdout ? imports.byteArray.toString(stdout).trim() : '';
+        const out = stdout ? new TextDecoder().decode(stdout).trim() : '';
         return out;
     } catch (e) {
         return '';
@@ -91,7 +91,7 @@ function processState(pid) {
     try {
         const path = `/proc/${pid}/stat`;
         const [, bytes] = GLib.file_get_contents(path);
-        const stat = bytes ? imports.byteArray.toString(bytes) : '';
+        const stat = bytes ? new TextDecoder().decode(bytes) : '';
         const rp = stat.lastIndexOf(')');
         if (rp < 0) return '';
         return stat.slice(rp + 2).trim().split(/\s+/)[0] || '';
@@ -132,7 +132,7 @@ function readLogTail(path, maxLines) {
         }
         const [ok, contents] = file.load_contents(null);
         if (!ok) return { lines: [], exists: true, error: 'read failed' };
-        const text = contents ? imports.byteArray.toString(contents) : '';
+        const text = contents ? new TextDecoder().decode(contents) : '';
         const allLines = text.length ? text.split(/\r?\n/) : [];
         // Drop a trailing empty element from a final newline.
         if (allLines.length && allLines[allLines.length - 1] === '') allLines.pop();
@@ -364,7 +364,7 @@ const LogViewerWindow = GObject.registerClass(
             const path = logPath(this._settings);
             try {
                 const file = Gio.File.new_for_path(path);
-                const empty = imports.byteArray.fromString('');
+                const empty = new TextEncoder().encode('');
                 file.replace_contents(empty, null, false,
                     Gio.FileCreateFlags.REPLACE_DESTINATION, null);
                 this._body.set_text('');
@@ -433,7 +433,6 @@ const Indicator = GObject.registerClass(
             this._pids = [];               // currently-detected ai-proxy PIDs
             this._binaryMissing = false;   // cached: binary not found
             this._pollId = 0;
-            this._restartPending = false;
             this._logWindow = null;        // live-tail window (singleton)
 
             /* ── Panel icon, recolored by running state ── */
@@ -659,11 +658,9 @@ const Indicator = GObject.registerClass(
 
         _restart() {
             if (this._pids.length === 0) return;
-            this._restartPending = true;
             this._stop();
             /* Wait for the stop to take effect before relaunching. */
             GLib.timeout_add(GLib.PRIORITY_DEFAULT, RESTART_GAP_MS, () => {
-                this._restartPending = false;
                 this._refreshNow();
                 if (this._pids.length === 0) this._start();
                 return GLib.SOURCE_REMOVE;
